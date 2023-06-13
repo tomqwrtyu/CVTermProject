@@ -1,4 +1,5 @@
 from vpython import *
+import numpy as np
 
 # Convert 3D .stl file ("stereo lithography") to VPython 7 object.
 
@@ -49,25 +50,31 @@ def stl_to_triangles(fileinfo): # specify file
     return compound(tris)
 
 if __name__ == '__main__':
-    scene = canvas(title = "CV term project", width = 1280, height = 720, x = 0, y = 0, center = vector(0, 0.1, 0), \
-                    background = vector(0, 0.6, 0.6))
-    size = 0.1   # 木塊邊長
-    L = 1        # 地板長度
-    v = 0.03     # 木塊速度
-    t = 0        # 時間
-    dt = 0.01    # 時間間隔
-    a_floor = box(pos = vector(0, 0, 0), length = L, height = size*0.1, width = L*0.5, color = color.blue)
+    scene = canvas(title = "CV term project", width = 1280, height = 720, x = 0, y = 0,\
+                   background = vector(0.14, 0.24, 0.38))
+    
+    h = 1
+    L = 1000
+    v = 0.03
+    t = 0
+    dt = 0.01
+    scene.camera.pos = vec(0, 400, 820)
+    scene.camera.axis = vec(0, -160, -270)
+    a_floor = box(pos = vector(0, 0, 0), length = L, height = h, width = L, color = vector(1.2 * 186 / 255, 1.2 * 153 / 255, 80 / 255))
 
     man = stl_to_triangles("model/cupper.stl")
-    man.pos = vec(-200,0,0)
-    man.color = color.orange
+    many = man.size.y
+    man.pos = vec(-200, many // 2, 0)
+    man.color = color.white
     # part = stl_to_triangles('Part1.stl')
     # part.pos = vec(-200,0,0)
     # part.color = color.orange
     cam = stl_to_triangles("model/Intel_RealSense_Depth_Camera_D435.stl")
     cam.size *= 10
-    cam.pos = vec(250,0,0)
-    cam.color = color.blue
-    for i in range(10):
-        sleep(0.2)
-        cam.pos = vec(250, (i + 1) * 100,0)
+    cam.pos = vec(0, cam.size.y + 112, 500)
+
+    i = 0
+    while True:
+        sleep(1 / 1000)
+        man.pos += dt * 50 * vec(np.sin((i % 360) / 180 * np.pi), 0, 0)
+        i += 2
