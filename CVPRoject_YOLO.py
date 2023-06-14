@@ -1,11 +1,11 @@
 import cv2
-import pyrealsense2 as rs
+import pyrealsense2.pyrealsense2 as rs
 from vpython import *
 import numpy as np
 import os
 import glob
 import pickle
-import torch
+from ultralytics import YOLO
 
 def stl_to_triangles(fileinfo): 
     fd = open(fileinfo, mode='rb')
@@ -155,6 +155,7 @@ if __name__ == '__main__':
     flann = cv2.FlannBasedMatcher(index_params, search_params)
 
     # load model
+    model = YOLO("best.pt")
 
     # building scene
     scene = canvas(title = "CV term project", width = 1900, height = 900, x = 0, y = 0,\
@@ -195,7 +196,18 @@ if __name__ == '__main__':
         new_frame = np.asanyarray(color_frame.get_data())
 
         # detect bbox
-        bboxes = [[[240, 480], [719, 800]]]
+        bboxes = []
+        results = model(new_frame)
+
+        for i, (result) in enumerate(results):
+            boxes = result.boxes
+            for box in boxes:
+                xyxy = box.xyxy[0]  # get box coordinates in (top, left, bottom, right) format
+                t = int(xyxy[0].item())
+                l = int(xyxy[1].item())
+                b = int(xyxy[2].item())
+                r = int(xyxy[3].item())
+                bboxes.append([[l, t], [r, b]])
 
         if len(bboxes) > 0:
             # detect features and draw boxes
@@ -203,9 +215,12 @@ if __name__ == '__main__':
             for bbox in bboxes:
                 x1, y1 = bbox[0]
                 x2, y2 = bbox[1]
-                cv2.rectangle(new_frame, (y1, x1), (y2, x2), color=(0, 255, 0), thickness=2)
                 bbfeatures.append([bbox, sift_detector.detectAndCompute(cv2.cvtColor(new_frame[x1:x2, y1:y2], cv2.COLOR_BGR2GRAY), None)])
 
+            for bbox in bboxes:
+                x1, y1 = bbox[0]
+                x2, y2 = bbox[1]
+                cv2.rectangle(new_frame, (y1, x1), (y2, x2), color=(0, 255, 0), thickness=2)
             cv2.putText(new_frame, "Number of boxes detected: {}.".format(len(bboxes)),\
                         org=(20, 20), fontFace=cv2.FONT_HERSHEY_COMPLEX, thickness=2, fontScale=0.6, color=(0, 0, 0))
             cv2.imshow("Realsense RGB", new_frame)
