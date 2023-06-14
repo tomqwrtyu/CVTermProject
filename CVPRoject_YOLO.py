@@ -158,7 +158,7 @@ if __name__ == '__main__':
     model = YOLO("best.pt")
 
     # building scene
-    scene = canvas(title = "CV term project", width = 1900, height = 900, x = 0, y = 0,\
+    scene = canvas(title = "CV term project", width = 1520, height = 680, x = 0, y = 0,\
                    background = vector(0.14, 0.24, 0.38))
     
     h = 1
@@ -174,20 +174,22 @@ if __name__ == '__main__':
     cupper_origin = vec(0, cupper.size.y // 2, -cupper.size.z // 2)
     cupper.pos = vec(0, 0, 0) + cupper_origin
     cupper.color = vector(0.95, 0.95, 0.95)
+    cupper.visible = False
     cuppers = [cupper]
-    num_cuppers_activate = 1
-    last_deactivate_idx = -1
+    num_cuppers_activate = 0
+    last_deactivate_idx = 0
 
     cam = stl_to_triangles("model/Intel_RealSense_Depth_Camera_D435.stl")
     cam.size *= 10
     cam.pos = vec(0, 125, cam.size.z // 2 + 500)
 
+    
     while True:
         rate(120)
         # get frame
         frames = pipeline.wait_for_frames()
         if not frames:
-           continue
+            continue
         aligned_frames = align.process(frames)   
         depth_frame = aligned_frames.get_depth_frame() 
         color_frame = aligned_frames.get_color_frame()
@@ -197,7 +199,7 @@ if __name__ == '__main__':
 
         # detect bbox
         bboxes = []
-        results = model(new_frame)
+        results = model(new_frame, verbose=False)
 
         for i, (result) in enumerate(results):
             boxes = result.boxes
@@ -209,6 +211,7 @@ if __name__ == '__main__':
                 r = int(xyxy[3].item())
                 bboxes.append([[l, t], [r, b]])
 
+        cup_world_points = []
         if len(bboxes) > 0:
             # detect features and draw boxes
             bbfeatures = []
@@ -230,7 +233,6 @@ if __name__ == '__main__':
                 break
 
             # kdtree feature matching
-            cup_world_points = []
             for bbox, (bbktps, bbdes) in bbfeatures:
                 for fkpts, fdes, frpts in features:
                     xo, yo = min(bbox[0][0], bbox[1][0]), min(bbox[0][1], bbox[1][1])
@@ -240,7 +242,7 @@ if __name__ == '__main__':
                     # select 1 good point (RANSAC)
                     if len(matchesMask) < 4:
                         continue
-                    goodbbidx, goodfidx = RANSAC_randPt(fkpts, bbktps, matches[matchesMask])
+                    goodbbidx, goodfidx = RANSAC_randPt(fkpts, bbktps, matches[matchesMask], err_pts=3, max_iter=100)
                     
                     # using that good point to retrieve point relative to cup axis
                     relative_cup_point = frpts[goodfidx]
@@ -256,23 +258,29 @@ if __name__ == '__main__':
                     cup_world_points.append(np.array(world_axis_point) * 1000 - np.array(relative_cup_point))
 
         # update cup position
-        # if len(cuppers) < len(cup_world_points): # need to add new cuppers
-        #     cuppers.append(cupper.clone())
-        #     num_cuppers_activate += 1
+        if len(cuppers) < len(cup_world_points): # need to add new cuppers
+            for _ in range(len(cup_world_points) - len(cuppers)):
+                cuppers.append(cupper.clone())
+                num_cuppers_activate += 1
 
-        # elif len(cuppers) > len(cup_world_points): # some cuppers are lost, or depth value is not available
-        #     for i in range(len(cuppers) - len(cup_world_points)):
-        #         cuppers[-i-1].visible = False
-        #         num_cuppers_activate -= 1
-        #     last_deactivate_idx = len(cuppers) - len(cup_world_points)
+        #this part can run for a large amount of times since no cupper model is deleted
+        elif len(cuppers) > len(cup_world_points): # some cuppers are lost, or depth value is not available
+            for i in range(len(cuppers) - len(cup_world_points)):
+                if cuppers[-i-1].visible == True:
+                    cuppers[-i-1].visible = False
+                    num_cuppers_activate -= 1
+                    last_deactivate_idx = len(cuppers) - i - 1
 
-        # elif num_cuppers_activate < len(cup_world_points) : # some cuppers are again detected, activating the unvisible.
-        #     last_deactivate_idx += (len(cup_world_points) - num_cuppers_activate - 1)
-        #     for i in range(len(cup_world_points) - num_cuppers_activate):
-        #         print(len(cup_world_points), num_cuppers_activate, i , last_deactivate_idx)
-        #         cuppers[last_deactivate_idx - 1 - i].visible = True
-        #         num_cuppers_activate += 1
+        elif num_cuppers_activate < len(cup_world_points) : # some cuppers are again detected, activating the invisible.
+            temp = last_deactivate_idx
+            
+            for i in range(len(cup_world_points) - num_cuppers_activate):
+                if cuppers[temp + i].visible == False:
+                    cuppers[temp + i].visible = True
+                    num_cuppers_activate += 1
+                    last_deactivate_idx = temp + i + 1
             
         for cup, (x, y, z) in zip(cuppers, cup_world_points):
             cup.pos = vec(x, y, z) + cupper_origin
+
 
