@@ -241,22 +241,27 @@ if __name__ == '__main__':
                     cup_world_points.append(np.array(world_axis_point) * 1000 - np.array(relative_cup_point))
 
         # update cup position
-        # if len(cuppers) < len(cup_world_points): # need to add new cuppers
-        #     cuppers.append(cupper.clone())
-        #     num_cuppers_activate += 1
+        if len(cuppers) < len(cup_world_points): # need to add new cuppers
+            for _ in range(len(cup_world_points) - len(cuppers)):
+                cuppers.append(cupper.clone())
+                num_cuppers_activate += 1
 
-        # elif len(cuppers) > len(cup_world_points): # some cuppers are lost, or depth value is not available
-        #     for i in range(len(cuppers) - len(cup_world_points)):
-        #         cuppers[-i-1].visible = False
-        #         num_cuppers_activate -= 1
-        #     last_deactivate_idx = len(cuppers) - len(cup_world_points)
+        #this part can run for a large amount of times since no cupper model is deleted
+        elif len(cuppers) > len(cup_world_points): # some cuppers are lost, or depth value is not available
+            for i in range(len(cuppers) - len(cup_world_points)):
+                if cuppers[-i-1].visible == True:
+                    cuppers[-i-1].visible = False
+                    num_cuppers_activate -= 1
+                    last_deactivate_idx = len(cuppers) - i - 1
 
-        # elif num_cuppers_activate < len(cup_world_points) : # some cuppers are again detected, activating the unvisible.
-        #     last_deactivate_idx += (len(cup_world_points) - num_cuppers_activate - 1)
-        #     for i in range(len(cup_world_points) - num_cuppers_activate):
-        #         print(len(cup_world_points), num_cuppers_activate, i , last_deactivate_idx)
-        #         cuppers[last_deactivate_idx - 1 - i].visible = True
-        #         num_cuppers_activate += 1
+        elif num_cuppers_activate < len(cup_world_points) : # some cuppers are again detected, activating the invisible.
+            temp = last_deactivate_idx
+            
+            for i in range(len(cup_world_points) - num_cuppers_activate):
+                if cuppers[temp + i].visible == False:
+                    cuppers[temp + i].visible = True
+                    num_cuppers_activate += 1
+                    last_deactivate_idx = temp + i + 1
             
         for cup, (x, y, z) in zip(cuppers, cup_world_points):
             cup.pos = vec(x, y, z) + cupper_origin
