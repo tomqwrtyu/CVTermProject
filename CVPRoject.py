@@ -5,7 +5,6 @@ import numpy as np
 import os
 import glob
 import pickle
-import torch
 
 def stl_to_triangles(fileinfo): 
     fd = open(fileinfo, mode='rb')
@@ -43,41 +42,6 @@ def initCamera():
     align = rs.align(rs.stream.color)
 
     return pipeline, align
-
-def findHomography_svd(matches):
-    N = len(matches)
-    A = np.zeros((2 * N, 9))
-
-    for i, (p1, p2) in enumerate(matches):
-        A[2 * i] = [p1[0], p1[1], 1, 0, 0, 0, -p2[0] * p1[0], -p2[0] * p1[1], -p2[0]]
-        A[2 * i + 1] = [0, 0, 0, p1[0], p1[1], 1, -p2[1] * p1[0], -p2[1] * p1[1], -p2[1]]
-
-    _, _, vt = np.linalg.svd(A)
-    h = vt[-1].reshape(3, 3)
-    h = (1 / h.item(8)) * h
-
-    return h
-
-def testHomography(matches, h, error = 1):
-    X1_Prime = None
-    X2 = None 
-    for p1, p2 in matches:
-        if isinstance(X1_Prime, np.ndarray):
-            X1_Prime = np.vstack((X1_Prime, h @ np.array([p1[0], p1[1], 1]).T))
-            X2 = np.vstack((X2, np.array([p2[0], p2[1]])))
-        else:
-            X1_Prime = h @ np.array([p1[0], p1[1], 1]).T
-            X2 = np.array([p2[0], p2[1]])
-        
-    match_npts = 0
-    
-    for i in range(X1_Prime.shape[0]):
-        if X1_Prime[i, 2] < 1e-3:
-            continue
-        if np.linalg.norm((X1_Prime[i, :2] / X1_Prime[i, 2]) - X2[i]) < error:
-            match_npts += 1
-
-    return match_npts
 
 def RANSAC_randPt(fktps, bbktps, matches, err_dist = 1, err_pts = 4, k_points = 4, max_iter = 100):
     match_pts = np.array([[match[0].queryIdx, match[0].trainIdx] for match in matches])
