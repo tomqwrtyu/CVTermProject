@@ -170,14 +170,6 @@ if __name__ == '__main__':
                 cv2.rectangle(new_frame, (y1, x1), (y2, x2), color=(0, 255, 0), thickness=2)
                 bbfeatures.append([bbox, sift_detector.detectAndCompute(cv2.cvtColor(new_frame[x1:x2, y1:y2], cv2.COLOR_BGR2GRAY), None)])
 
-            cv2.putText(new_frame, "Number of boxes detected: {}.".format(len(bboxes)),\
-                        org=(20, 20), fontFace=cv2.FONT_HERSHEY_COMPLEX, thickness=2, fontScale=0.6, color=(0, 0, 0))
-            cv2.imshow("Realsense RGB", new_frame)
-            key = cv2.waitKey(1)
-            if key == 27:
-                cv2.destroyAllWindows()
-                break
-
             # kdtree feature matching
             cup_world_points = []
             for bbox, (bbktps, bbdes) in bbfeatures:
@@ -203,6 +195,14 @@ if __name__ == '__main__':
                     camera_axis_point = rs.rs2_deproject_pixel_to_point(aligned_intrinsic, (y, x), depth)
                     world_axis_point = rs.rs2_transform_point_to_point(camera_extrinsics, camera_axis_point)
                     cup_world_points.append(np.array(world_axis_point) * 1000 - np.array(relative_cup_point))
+
+        cv2.putText(new_frame, "Number of boxes detected: {}.".format(len(bboxes)),\
+                        org=(20, 20), fontFace=cv2.FONT_HERSHEY_COMPLEX, thickness=2, fontScale=0.6, color=(0, 0, 0))
+        cv2.imshow("Realsense RGB", new_frame)
+        key = cv2.waitKey(1)
+        if key == 27:
+            cv2.destroyAllWindows()
+            break
 
         # update cup position
         if len(cuppers) < len(cup_world_points): # need to add new cuppers
