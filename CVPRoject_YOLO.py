@@ -102,6 +102,9 @@ if __name__ == '__main__':
     camera_extrinsics = rs.extrinsics()
     camera_extrinsics.rotation = [float(x) for x in [1, 0, 0, 0, np.cos(np.pi), -np.sin(np.pi), 0, np.sin(np.pi), np.cos(np.pi)]]
     camera_extrinsics.translation = [-0.03, 0.125, 0.5] # location of "depth lens", specified in meter
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    video_shape = (720, 1280)
+    out = cv2.VideoWriter('result.mp4', fourcc, 30.0, video_shape)
 
     # initialize SIFT detector, load feature keypoints & descriptions
     sift_detector = cv2.SIFT_create()
@@ -189,13 +192,6 @@ if __name__ == '__main__':
                 x1, y1 = bbox[0]
                 x2, y2 = bbox[1]
                 cv2.rectangle(new_frame, (y1, x1), (y2, x2), color=(0, 255, 0), thickness=2)
-            cv2.putText(new_frame, "Number of boxes detected: {}.".format(len(bboxes)),\
-                        org=(20, 20), fontFace=cv2.FONT_HERSHEY_COMPLEX, thickness=2, fontScale=0.6, color=(0, 0, 0))
-            cv2.imshow("Realsense RGB", new_frame)
-            key = cv2.waitKey(1)
-            if key == 27:
-                cv2.destroyAllWindows()
-                break
 
             # kdtree feature matching
             for bbox, (bbktps, bbdes) in bbfeatures:
@@ -221,6 +217,15 @@ if __name__ == '__main__':
                     camera_axis_point = rs.rs2_deproject_pixel_to_point(aligned_intrinsic, (y, x), depth)
                     world_axis_point = rs.rs2_transform_point_to_point(camera_extrinsics, camera_axis_point)
                     cup_world_points.append(np.array(world_axis_point) * 1000 - np.array(relative_cup_point))
+
+        cv2.putText(new_frame, "Number of boxes detected: {}.".format(len(bboxes)),\
+                        org=(20, 20), fontFace=cv2.FONT_HERSHEY_COMPLEX, thickness=2, fontScale=0.6, color=(0, 0, 0))
+        out.write(new_frame)
+        cv2.imshow("Realsense RGB", new_frame)
+        key = cv2.waitKey(1)
+        if key == 27:
+            cv2.destroyAllWindows()
+            break
 
         # update cup position
         if len(cuppers) < len(cup_world_points): # need to add new cuppers
