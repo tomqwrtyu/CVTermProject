@@ -1,31 +1,10 @@
 import cv2
 import pyrealsense2.pyrealsense2 as rs
-from vpython import *
 import numpy as np
 import os
 import glob
 import pickle
 from ultralytics import YOLO
-
-def stl_to_triangles(fileinfo): 
-    fd = open(fileinfo, mode='rb')
-    tris = [] # list of triangles to compound
-    fd.seek(0)
-    fList = fd.readlines()
-
-    # Decompose list into vertex positions and normals
-    vs = []
-    for line in fList:
-        FileLine = line.split( )
-        if FileLine[0] == b'facet':
-            N = vec(float(FileLine[2]), float(FileLine[3]), float(FileLine[4]))
-        elif FileLine[0] == b'vertex':
-            vs.append( vertex(pos=vec(float(FileLine[1]), float(FileLine[2]), float(FileLine[3])), normal=N, color=color.white) )
-            if len(vs) == 3:
-                tris.append(triangle(vs=vs))
-                vs = []
-                    
-    return compound(tris)
 
 def initCamera():
     pipeline = rs.pipeline()
@@ -126,36 +105,9 @@ if __name__ == '__main__':
 
     # load model
     model = YOLO("best.pt")
+    estimated_coordinates_record = []
 
-    # building scene
-    scene = canvas(title = "CV term project", width = 1520, height = 680, x = 0, y = 0,\
-                   background = vector(0.14, 0.24, 0.38))
-    
-    h = 1
-    L = 1000
-    v = 0.03
-    t = 0
-    dt = 0.01
-    scene.camera.pos = vec(0, 400, 820)
-    scene.camera.axis = vec(0, -160, -270)
-    a_floor = box(pos = vector(0, 0, 0), length = L, height = h, width = L, color = vector(1.2 * 186 / 255, 1.2 * 153 / 255, 80 / 255))
-
-    cupper = stl_to_triangles("model/cupper.stl")
-    cupper_origin = vec(0, cupper.size.y // 2, -cupper.size.z // 2)
-    cupper.pos = vec(0, 0, 0) + cupper_origin
-    cupper.color = vector(0.95, 0.95, 0.95)
-    cupper.visible = False
-    cuppers = [cupper]
-    num_cuppers_activate = 0
-    last_deactivate_idx = 0
-
-    cam = stl_to_triangles("model/Intel_RealSense_Depth_Camera_D435.stl")
-    cam.size *= 10
-    cam.pos = vec(0, 125, cam.size.z // 2 + 500)
-
-    
     while True:
-        rate(120)
         # get frame
         frames = pipeline.wait_for_frames()
         if not frames:
@@ -205,7 +157,7 @@ if __name__ == '__main__':
                     # select 1 good point (RANSAC)
                     if len(matchesMask) < 4:
                         continue
-                    goodbbidx, goodfidx = RANSAC_randPt(fkpts, bbktps, matches[matchesMask], err_pts=3, max_iter=100)
+                    goodbbidx, goodfidx = RANSAC_randPt(fkpts, bbktps, matches[matchesMask], err_pts=2, max_iter=100)
                     
                     # using that good point to retrieve point relative to cup axis
                     relative_cup_point = frpts[goodfidx]
@@ -219,41 +171,17 @@ if __name__ == '__main__':
                         continue
                     camera_axis_point = rs.rs2_deproject_pixel_to_point(aligned_intrinsic, (y, x), depth)
                     world_axis_point = rs.rs2_transform_point_to_point(camera_extrinsics, camera_axis_point)
-                    cup_world_points.append(np.array(world_axis_point) * 1000 - np.array(relative_cup_point))
+                    estimated_coordinates_record.append([world_axis_point[0], world_axis_point[1], depth])
+                    cv2.putText(new_frame, "Estimated world coordinates: ({:2f}, {:2f}, {:2f}) (m).".format(world_axis_point[0], world_axis_point[1], depth),\
+                        org=(20, 60), fontFace=cv2.FONT_HERSHEY_COMPLEX, thickness=2, fontScale=1, color=(0, 0, 0))
 
-        cv2.putText(new_frame, "Number of boxes detected: {}.".format(len(bboxes)),\
-                        org=(20, 20), fontFace=cv2.FONT_HERSHEY_COMPLEX, thickness=2, fontScale=0.6, color=(0, 0, 0))
+        # cv2.putText(new_frame, "Number of boxes detected: {}.".format(len(bboxes)),\
+        #                 org=(20, 20), fontFace=cv2.FONT_HERSHEY_COMPLEX, thickness=2, fontScale=1, color=(0, 0, 0))
         out.write(new_frame)
+        cv2.imwrite("precision test.jpg", new_frame)
         cv2.imshow("Realsense RGB", new_frame)
         key = cv2.waitKey(1)
         if key == 27:
+            np.save("coordinates", np.array(estimated_coordinates_record))
             cv2.destroyAllWindows()
             break
-
-        # update cup position
-        if len(cuppers) < len(cup_world_points): # need to add new cuppers
-            for _ in range(len(cup_world_points) - len(cuppers)):
-                cuppers.append(cupper.clone())
-                num_cuppers_activate += 1
-
-        #this part can run for a large amount of times since no cupper model is deleted
-        elif len(cuppers) > len(cup_world_points): # some cuppers are lost, or depth value is not available
-            for i in range(len(cuppers) - len(cup_world_points)):
-                if cuppers[-i-1].visible == True:
-                    cuppers[-i-1].visible = False
-                    num_cuppers_activate -= 1
-                    last_deactivate_idx = len(cuppers) - i - 1
-
-        elif num_cuppers_activate < len(cup_world_points) : # some cuppers are again detected, activating the invisible.
-            temp = last_deactivate_idx
-            
-            for i in range(len(cup_world_points) - num_cuppers_activate):
-                if cuppers[temp + i].visible == False:
-                    cuppers[temp + i].visible = True
-                    num_cuppers_activate += 1
-                    last_deactivate_idx = temp + i + 1
-            
-        for cup, (x, y, z) in zip(cuppers, cup_world_points):
-            cup.pos = vec(x, y, z) + cupper_origin
-
-
